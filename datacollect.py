@@ -27,12 +27,10 @@ def main():
 	gains = []
 	highs = []
 	count = 1
+	print("Running...")
 	for link in links:
 		main_html = url_parse(link)[2]
-
-		#Find hike to scrape
 		hike_elem = main_html.xpath('//div[@class="search-result-item"]')
-		print("Running...")
 		for elem in hike_elem:
 			name_elem = elem.xpath('.//a[@class="listitem-title"]')
 			names.extend(name_elem[0].xpath('.//span/text()'))
@@ -62,14 +60,10 @@ def main():
 				highs.append(None)
 			else:
 				highs.append(high[0].xpath('.//span/text()')[0].split(' ')[0])
-		print('Page ' + str(count)) + ' done.'
+		print('Page ' + str(count) + ' done.', end='\r')
 		count = count + 1
-		
-	#Merge and convert to dataframe
 	d = zip(names, [i[0] for i in areas], [i[1] for i in areas], [i[2] for i in areas], lengths, gains, highs)
 	df = pd.DataFrame(data=d, columns=['Name', 'Region', 'Area', 'Sub-area', 'Length', 'Gain', 'Max Elevation'])
-	
-	#Out to CSV
 	df.to_csv('data.csv')
 	print('Data saved to \'data.csv\'')
 
