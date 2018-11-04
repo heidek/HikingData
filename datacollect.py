@@ -2,17 +2,23 @@
 on the site, it finds the name of the hike and basic statistics on the hike, then saves this 
 data to a CSV file.'''
 
-
+from lxml import html
 import pandas as pd
 import requests
-from lxml import html
+import sqlite3
 
 page_url = 'https://www.wta.org/go-outside/hikes?b_start:int=0'
 
 def main():
 	main_html = url_parse(page_url)[2]
 
+	#Connect to database
+	print('Connecting to database...')
+	db = sqlite3.connect('db/hikes.db')
+	c = db.cursor()
+
 	#Generates list of links for all pages with hikes on them
+	print('Collecting links...')
 	link_elem = main_html.xpath('//nav[@class="pagination"]')
 	last_num = int(link_elem[0].xpath('.//li[@class="last"]')[0].xpath('.//a/text()')[0])
 
@@ -27,7 +33,9 @@ def main():
 	gains = []
 	highs = []
 	count = 1
-	print("Running...")
+	print('Running...')
+
+	#Data collection
 	for link in links:
 		main_html = url_parse(link)[2]
 		hike_elem = main_html.xpath('//div[@class="search-result-item"]')
@@ -35,11 +43,14 @@ def main():
 			name_elem = elem.xpath('.//a[@class="listitem-title"]')
 			names.extend(name_elem[0].xpath('.//span/text()'))
 
-			area = elem.xpath('.//h3[@class="region"]/text()')[0]
-			area = area.replace('-','').split('  ')
-			if len(area) < 3:
-				for i in range(3 - len(area)):
-					area.append(None)
+			area = elem.xpath('.//h3[@class="region"]/text()')
+			if len(area) > 0:
+				area = area[0].replace('-','').split('  ')
+				if len(area) < 3:
+					for i in range(3 - len(area)):
+						area.append(None)
+			else:
+				area = (None, None, None)
 			areas.append(area)
 
 			stat_elem = elem.xpath('.//div[@class="hike-stats alpha"]')
@@ -60,10 +71,20 @@ def main():
 				highs.append(None)
 			else:
 				highs.append(high[0].xpath('.//span/text()')[0].split(' ')[0])
-		print('Page ' + str(count) + ' done.', end='\r')
+		print('Page ' + str(count) + '/' + str(len(links)) + ' done.', end='\r')
 		count = count + 1
-	d = zip(names, [i[0] for i in areas], [i[1] for i in areas], [i[2] for i in areas], lengths, gains, highs)
+
+	#Data consolidation
+	d = list(zip(names, [i[0] for i in areas], [i[1] for i in areas], [i[2] for i in areas], lengths, gains, highs))
 	df = pd.DataFrame(data=d, columns=['Name', 'Region', 'Area', 'Sub-area', 'Length', 'Gain', 'Max Elevation'])
+
+	#Data output
+	for row in d:
+		write_sql(db, row)
+	db.commit()
+	db.close()
+	print('Data saved to db/hikes.db')
+
 	df.to_csv('data.csv')
 	print('Data saved to \'data.csv\'')
 
@@ -74,6 +95,13 @@ def url_parse(url):
 	html_list = html.fromstring(source)
 
 	return response, source, html_list
+
+#Takes data and inputs it into database
+def write_sql(conn, datachunk):
+	c = conn.cursor()
+	hike = ''' INSERT INTO hikes(name, region, area, subarea, length, gain, max_elevation) 
+	VALUES (?, ?, ?, ?, ?, ?, ?) '''
+	c.execute(hike, datachunk[0:7])
 
 if __name__ == '__main__':
 	main()
